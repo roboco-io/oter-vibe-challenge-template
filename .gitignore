@@ -1,0 +1,7 @@
+vendor/
+logs/*.log
+.env
+*.tfstate*
+.terraform/
+node_modules/
+app-legacy/logs/*.log
