@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # RealWorld(Conduit) 공식 API E2E 안전망 실행 스크립트.
-# 마이그레이션 결과와 재구현 결과 모두, 동일한 공식 컬렉션 기준으로 이 스크립트가 그린이어야 동등성이 인정된다.
+# 마이그레이션 결과와 재구현 결과 모두, 동일한 공식 컬렉션 기준으로 레거시 baseline 통과 프로파일
+# (현재 388 assertion)을 회귀 없이 통과해야 동등성이 인정된다. 문서화된 68개 갭 해소는 가점.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
