@@ -1,0 +1,102 @@
+name: Deploy
+
+# 배포 파이프라인 골격: test → build(NCR push) → deploy(NCS 갱신, 주석 TODO).
+# main 브랜치 push와 수동 실행(workflow_dispatch)에서 동작한다.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # app-legacy를 docker compose로 기동한 뒤, 루트 e2e/run-e2e.sh로
+      # RealWorld(Conduit) 공식 API 컬렉션(Newman)을 돌린다.
+      - name: Start app (docker compose)
+        working-directory: app-legacy
+        run: docker compose up -d --build
+
+      - name: Wait for app health
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/tags >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "app did not become healthy in time" >&2
+          exit 1
+
+      - name: Set up Node.js (for npx newman)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # TODO(지원자): 이 저장소 기준 e2e는 baseline 프로파일 기준 회귀 감시용이며
+      # 완전 그린을 보장하지 않는다. 실패를 빌드 차단으로 둘지(기본값, 아래
+      # continue-on-error: false 유지) 완화할지는 팀 정책에 맞춰 ADR로 정하고
+      # 이 스텝의 continue-on-error 값을 조정하라.
+      - name: Run E2E (Newman)
+        continue-on-error: false
+        run: bash e2e/run-e2e.sh http://localhost:8080
+
+      - name: Dump app logs on failure
+        if: failure()
+        working-directory: app-legacy
+        run: docker compose logs
+
+      - name: Stop app
+        if: always()
+        working-directory: app-legacy
+        run: docker compose down -v
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t "$IMAGE_NAME:$IMAGE_TAG" app-legacy
+        env:
+          IMAGE_NAME: oter-vibe-challenge
+          IMAGE_TAG: ${{ github.sha }}
+
+      # NHN Terraform provider(nhn-cloud/nhncloud)에는 NCR 전용 리소스가
+      # 없으므로(infra/ncr.tf 참고), 레지스트리 자체는 콘솔/CLI로 사전 생성돼
+      # 있다고 가정하고 여기서는 표준 docker login/push만 수행한다.
+      # 자격증명은 secrets 참조만 사용하며 이 저장소 어디에도 값을 커밋하지 않는다.
+      - name: Log in to NCR
+        run: echo "${{ secrets.NCR_PASSWORD }}" | docker login "${{ secrets.NCR_REGISTRY }}" -u "${{ secrets.NCR_USERNAME }}" --password-stdin
+
+      - name: Tag & push image to NCR
+        run: |
+          docker tag "$IMAGE_NAME:$IMAGE_TAG" "${{ secrets.NCR_REGISTRY }}/$IMAGE_NAME:$IMAGE_TAG"
+          docker push "${{ secrets.NCR_REGISTRY }}/$IMAGE_NAME:$IMAGE_TAG"
+        env:
+          IMAGE_NAME: oter-vibe-challenge
+          IMAGE_TAG: ${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO(지원자, 필수): NHN Terraform provider(nhn-cloud/nhncloud)에는
+      # "NCS"와 정확히 일치하는 리소스가 없다(infra/ncs.tf 조사 결과 참고).
+      # Terraform apply로 워크로드를 갱신할 수 없으므로, 아래 중 확정한 방식을
+      # ADR로 남기고 실제 커맨드로 교체하라:
+      #   - NHN Cloud CLI(ntctl 등)로 서비스/워크로드 이미지 태그 갱신
+      #   - NHN Cloud REST API를 curl로 직접 호출해 갱신
+      #   - 콘솔 수동 조작이 불가피하다면 그 사실과 대안 부재 근거를 ADR에 남기고
+      #     이 스텝은 배포 완료를 알리는 알림/기록 스텝으로 대체
+      # 아래 두 줄은 위 방식이 확정되기 전까지의 placeholder이며 실제로
+      # NCS를 갱신하지 않는다.
+      - name: Update NCS workload (placeholder)
+        run: |
+          echo "TODO: NHN API/CLI/콘솔로 NCS 워크로드를 image tag=${{ github.sha }} 로 갱신하세요."
+          echo "TODO: 자격증명은 secrets.NCS_* 참조로 주입하고, 실제 배포 커맨드로 이 스텝을 교체하세요."
