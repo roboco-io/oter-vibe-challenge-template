@@ -78,7 +78,20 @@ else
   exit 0
 fi
 
-prompt="$(cat "$skill_file")"
+# 크로스 프로젝트 데이터 누출 방지: 이 저장소에 대응하는 Claude Code 세션 로그
+# 디렉터리(~/.claude/projects/<인코딩된 경로>)를 계산해 프롬프트 맨 앞에 주입한다.
+# 인코딩 규칙(절대 경로의 "/"를 "-"로 치환)은 실측으로 확인한 것이며, 경로에
+# "."(점)이 포함되는 등 일부 케이스는 검증되지 않았다는 한계가 있다 — 계산한
+# 디렉터리가 실제로 없으면 SKILL.md 쪽에서 "확인 불가"로 처리하도록 되어 있다.
+claude_project_dir="$HOME/.claude/projects/$(printf '%s' "$repo_root" | tr '/' '-')"
+
+scope_context="현재 저장소 경로: $repo_root
+현재 저장소 세션 로그 디렉터리: $claude_project_dir
+(위 세션 로그 디렉터리 밖의 다른 프로젝트 로그는 절대 읽지 마세요.)
+
+"
+
+prompt="${scope_context}$(cat "$skill_file")"
 err_log="$(mktemp)"
 retro_content=""
 case "$runner" in

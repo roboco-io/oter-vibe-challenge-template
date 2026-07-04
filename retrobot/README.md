@@ -13,12 +13,17 @@
 `git push`를 실행하면 `.githooks/pre-push` 훅이 다음을 확인합니다.
 
 - `retros/`에 24시간 이내에 생성된 회고가 있으면 그대로 push를 진행합니다.
-- 없으면(또는 마지막 회고로부터 하루가 지났으면) `claude -p "$(cat retrobot/SKILL.md)"`를
-  호출해 최근 Claude Code 세션 로그(`~/.claude/projects/*.jsonl`)와
-  `uvx tokenhabit --days 1 --lang ko` 결과를 바탕으로 KPT 회고를 생성하고,
+- 없으면(또는 마지막 회고로부터 하루가 지났으면) 이 저장소에 대응하는 Claude Code
+  세션 로그 디렉터리(`~/.claude/projects/<이 저장소 경로를 인코딩한 이름>/*.jsonl`)와
+  `uvx tokenhabit --project <위 디렉터리> --days 1 --lang ko` 결과로 프롬프트를
+  스코프해 `claude -p "..."`를 호출하고, KPT 회고를 생성해
   `retros/YYYY-MM-DD-HHMM.md`로 저장한 뒤 `[Retrobot]` 태그가 붙은 커밋을 자동으로
-  만듭니다(그 커밋 자체는 다음 push부터 원격에 반영됩니다).
+  만듭니다(그 커밋 자체는 다음 push부터 원격에 반영됩니다). 다른 프로젝트의 로그·
+  토큰 통계는 대상에서 제외됩니다.
 - 방금 만든 커밋이 `[Retrobot]` 커밋이면(재귀 방지) 이번 트리거는 건너뜁니다.
+
+> **프라이버시 주의**: 회고는 이 저장소 작업으로 스코프되지만, Claude Code 로그
+> 특성상 민감정보가 섞이지 않도록 커밋 전 확인 권장.
 
 ## claude CLI가 없거나 회고 생성이 실패하면
 
